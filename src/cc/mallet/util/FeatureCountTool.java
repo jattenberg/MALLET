@@ -5,23 +5,38 @@ import gnu.trove.*;
 
 import java.util.Formatter;
 import java.util.Locale;
+import java.util.logging.*;
 import java.io.*;
 
 import java.text.NumberFormat;
 
-public class FeatureCounter {
+public class FeatureCountTool {
 
+	protected static Logger logger = MalletLogger.getLogger(FeatureCountTool.class.getName());
+
+	static cc.mallet.util.CommandOption.String inputFile = new cc.mallet.util.CommandOption.String
+		(FeatureCountTool.class, "input", "FILENAME", true, null,
+		 "Filename for the input instance list", null);
+	
 	double[] featureCounts;
 	InstanceList instances;
 	int numFeatures;
 	int[] documentFrequencies;
 
-	public FeatureCounter (InstanceList instances) {
+	public FeatureCountTool (InstanceList instances) {
 		this.instances = instances;
 		numFeatures = instances.getDataAlphabet().size();
 
 		featureCounts = new double[numFeatures];
 		documentFrequencies = new int[numFeatures];
+	}
+
+	public double[] getFeatureCounts() {
+		return featureCounts;
+	}
+
+	public int[] getDocumentFrequencies() {
+		return documentFrequencies;
 	}
 
 	public void count() {
@@ -31,7 +46,7 @@ public class FeatureCounter {
 		int index = 0;
 
 		if (instances.size() == 0) { 
-			System.err.println("Instance list is empty");
+			logger.info("Instance list is empty");
 			return;
 		}
 
@@ -45,7 +60,7 @@ public class FeatureCounter {
 				}
 				
 				int[] keys = docCounts.keys();
-				for (int i = 0; i < keys.length - 1; i++) {
+				for (int i = 0; i < keys.length; i++) {
 					int feature = keys[i];
 					featureCounts[feature] += docCounts.get(feature);
 					documentFrequencies[feature]++;
@@ -74,6 +89,9 @@ public class FeatureCounter {
 				if (index % 1000 == 0) { System.err.println(index); }
 			}
 		}
+		else {
+			logger.info("Unsupported data class: " + instances.get(0).getData().getClass().getName());
+		}
 	}
 
 	public void printCounts() {
@@ -97,10 +115,26 @@ public class FeatureCounter {
 		}
 		
 	}
+	
+	public Alphabet getPrunedAlphabet(int minDocs, int maxDocs, int minCount, int maxCount) {
+		Alphabet inputAlphabet = instances.getDataAlphabet();
+		Alphabet outputAlphabet = new Alphabet();
+		for (int inputType = 0; inputType < numFeatures; inputType++) {
+			if (featureCounts[inputType] >= minCount && featureCounts[inputType] <= maxCount && documentFrequencies[inputType] >= minDocs && documentFrequencies[inputType] <= maxDocs) {
+				outputAlphabet.lookupIndex(inputAlphabet.lookupObject(inputType));
+			}
+		}
+		
+		return outputAlphabet;
+	}
 
 	public static void main (String[] args) throws Exception {
-		InstanceList instances = InstanceList.load(new File(args[0]));
-		FeatureCounter counter = new FeatureCounter(instances);
+		CommandOption.setSummary (FeatureCountTool.class,
+								  "Print feature counts and instances per feature (eg document frequencies) in an instance list");
+		CommandOption.process (FeatureCountTool.class, args);
+
+		InstanceList instances = InstanceList.load (new File(inputFile.value));
+		FeatureCountTool counter = new FeatureCountTool(instances);
 		counter.count();
 		counter.printCounts();
 	}
